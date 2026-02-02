@@ -146,7 +146,8 @@ class HierarchicalChunker:
                 end_time=end_time,
                 shot_ids=shot_ids,
                 transcript=combined_transcript,
-                embedding=avg_embedding.tolist()
+                embedding=avg_embedding.tolist(),
+                reasoning=f"Grouped {len(shot_ids)} shots via hierarchical clustering at {level} level."
             )
             chunks.append(chunk)
         

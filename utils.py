@@ -50,6 +50,7 @@ class Chunk:
     transcript: str = ""
     embedding: Optional[List[float]] = None
     parent_chunk_id: Optional[str] = None
+    reasoning: str = ""
 
     @property
     def duration(self) -> float:
@@ -72,6 +73,7 @@ class Chunk:
             "transcript": self.transcript,
             "embedding": self.embedding,
             "parent_chunk_id": self.parent_chunk_id,
+            "reasoning": self.reasoning,
             "child_shot_ids": self.shot_ids
         }
 

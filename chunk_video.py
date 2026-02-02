@@ -128,42 +128,61 @@ def parse_args():
     return parser.parse_args()
 
 
-def main():
-    args = parse_args()
+def run_pipeline(
+    video_path: str,
+    output_dir: str,
+    temporal_weight: float = 0.3,
+    fine_duration: float = 30.0,
+    medium_duration: float = 120.0,
+    coarse_duration: float = 300.0,
+    use_boundary_refinement: bool = False,
+    generate_captions: bool = False,
+    skip_audio: bool = False,
+    device: str = "cuda",
+    resume_from: Optional[str] = None,
+    caption_provider: str = "openai",
+    caption_model: str = "gpt-4o-mini",
+    reasoning_model: Optional[str] = None,
+    ignore_checkpoint: bool = False,
+    log_level: str = "INFO",
+    shot_threshold: float = 27.0,
+    batch_size: int = 32
+):
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
     
-    Path(args.output_dir).mkdir(parents=True, exist_ok=True)
-    
-    log_file = os.path.join(args.output_dir, "chunking.log")
-    logger = setup_logging(args.log_level, log_file)
+    log_file = os.path.join(output_dir, "chunking.log")
+    logger = setup_logging(log_level, log_file)
     
     logger.info("=" * 60)
     logger.info("Video Chunking Pipeline Started")
     logger.info("=" * 60)
-    logger.info(f"Video: {args.video_path}")
-    logger.info(f"Output directory: {args.output_dir}")
+    logger.info(f"Video: {video_path}")
+    logger.info(f"Output directory: {output_dir}")
     
-    if not os.path.exists(args.video_path):
-        logger.error(f"Video file not found: {args.video_path}")
-        sys.exit(1)
+    if not os.path.exists(video_path):
+        logger.error(f"Video file not found: {video_path}")
+        return None
     
-    checkpoint_path = os.path.join(args.output_dir, "checkpoint.pkl")
+    checkpoint_path = os.path.join(output_dir, "checkpoint.pkl")
     checkpoint_data = {}
     
-    if args.resume_from:
-        checkpoint_data = load_checkpoint(args.resume_from) or {}
-        logger.info(f"Resumed from checkpoint: {args.resume_from}")
+    if ignore_checkpoint:
+        logger.info("Ignoring existing checkpoint as requested (fresh run)")
+    elif resume_from:
+        checkpoint_data = load_checkpoint(resume_from) or {}
+        logger.info(f"Resumed from checkpoint: {resume_from}")
     elif os.path.exists(checkpoint_path):
         checkpoint_data = load_checkpoint(checkpoint_path) or {}
         logger.info("Found existing checkpoint, resuming")
     
     logger.info("Step 1: Getting video metadata")
     try:
-        video_metadata = get_video_metadata(args.video_path)
+        video_metadata = get_video_metadata(video_path)
         logger.info(f"Video duration: {video_metadata['duration']:.2f}s")
         logger.info(f"Video resolution: {video_metadata['width']}x{video_metadata['height']}")
     except Exception as e:
         logger.error(f"Failed to get video metadata: {e}")
-        sys.exit(1)
+        return None
     
     logger.info("Step 2: Shot detection")
     if "shots" in checkpoint_data:
@@ -171,11 +190,11 @@ def main():
         logger.info(f"Loaded {len(shots)} shots from checkpoint")
     else:
         shot_detector = ShotDetector(
-            threshold=args.shot_threshold,
+            threshold=shot_threshold,
             min_shot_duration=0.5,
             max_shot_duration=30.0
         )
-        shots = shot_detector.detect_shots(args.video_path)
+        shots = shot_detector.detect_shots(video_path)
         checkpoint_data["shots"] = shots
         save_checkpoint(checkpoint_data, checkpoint_path)
         logger.info(f"Detected {len(shots)} shots, checkpoint saved")
@@ -186,19 +205,19 @@ def main():
         shots = checkpoint_data["shots"]
     else:
         import torch
-        device = args.device if torch.cuda.is_available() or args.device == "cpu" else "cpu"
-        logger.info(f"Using device: {device}")
+        actual_device = device if torch.cuda.is_available() or device == "cpu" else "cpu"
+        logger.info(f"Using device: {actual_device}")
         
         feature_extractor = FeatureExtractor(
-            device=device,
-            batch_size=args.batch_size
+            device=actual_device,
+            batch_size=batch_size
         )
         
         shots = feature_extractor.extract_all_features(
-            args.video_path,
+            video_path,
             shots,
-            cache_dir=args.output_dir,
-            skip_audio=args.skip_audio
+            cache_dir=output_dir,
+            skip_audio=skip_audio
         )
         
         checkpoint_data["shots"] = shots
@@ -208,30 +227,30 @@ def main():
     
     logger.info("Step 4: Hierarchical clustering")
     chunker = HierarchicalChunker(
-        temporal_weight=args.temporal_weight,
-        fine_duration=args.fine_duration,
-        medium_duration=args.medium_duration,
-        coarse_duration=args.coarse_duration
+        temporal_weight=temporal_weight,
+        fine_duration=fine_duration,
+        medium_duration=medium_duration,
+        coarse_duration=coarse_duration
     )
     
     chunks = chunker.chunk_video(shots)
     hierarchy = chunker.build_hierarchy(chunks)
     
-    for level, level_chunks in chunks.items():
-        logger.info(f"{level.capitalize()}: {len(level_chunks)} chunks")
+    for lvl, level_chunks in chunks.items():
+        logger.info(f"{lvl.capitalize()}: {len(level_chunks)} chunks")
     
-    if args.use_boundary_refinement:
+    if use_boundary_refinement:
         logger.info("Step 5: Boundary refinement")
         try:
             refiner = BoundaryRefiner(
-                provider=args.caption_provider,
-                model=args.caption_model
+                provider=caption_provider,
+                model=reasoning_model or caption_model
             )
             
-            for level in ["fine", "medium"]:
-                if level in chunks:
-                    chunks[level] = refiner.refine_boundaries(
-                        shots, chunks[level]
+            for lvl in ["fine", "medium"]:
+                if lvl in chunks:
+                    chunks[lvl] = refiner.refine_boundaries(
+                        shots, chunks[lvl]
                     )
             
             hierarchy = chunker.build_hierarchy(chunks)
@@ -239,16 +258,16 @@ def main():
         except Exception as e:
             logger.warning(f"Boundary refinement failed: {e}")
     
-    if args.generate_captions:
+    if generate_captions:
         logger.info("Step 6: Caption generation")
         try:
             caption_gen = CaptionGenerator(
-                provider=args.caption_provider,
-                model=args.caption_model
+                provider=caption_provider,
+                model=caption_model
             )
             
             chunks = caption_gen.generate_captions_for_chunks(
-                args.video_path,
+                video_path,
                 chunks
             )
             logger.info("Caption generation completed")
@@ -263,8 +282,8 @@ def main():
         "video_metadata": video_metadata,
         "shots": [shot.to_dict() for shot in shots],
         "chunks": {
-            level: [chunk.to_dict() for chunk in level_chunks]
-            for level, level_chunks in chunks.items()
+            lvl: [chunk.to_dict() for chunk in level_chunks]
+            for lvl, level_chunks in chunks.items()
         },
         "hierarchy": hierarchy
     }
@@ -294,7 +313,7 @@ def main():
     
     output["quality_metrics"] = metrics
     
-    output_path = os.path.join(args.output_dir, "chunks.json")
+    output_path = os.path.join(output_dir, "chunks.json")
     with open(output_path, "w") as f:
         json.dump(output, f, indent=2, default=str)
     
@@ -309,6 +328,28 @@ def main():
     logger.info(f"Coarse chunks: {len(chunks.get('coarse', []))}")
     
     return output
+
+
+def main():
+    args = parse_args()
+    run_pipeline(
+        video_path=args.video_path,
+        output_dir=args.output_dir,
+        temporal_weight=args.temporal_weight,
+        fine_duration=args.fine_duration,
+        medium_duration=args.medium_duration,
+        coarse_duration=args.coarse_duration,
+        use_boundary_refinement=args.use_boundary_refinement,
+        generate_captions=args.generate_captions,
+        skip_audio=args.skip_audio,
+        device=args.device,
+        resume_from=args.resume_from,
+        caption_provider=args.caption_provider,
+        caption_model=args.caption_model,
+        log_level=args.log_level,
+        shot_threshold=args.shot_threshold,
+        batch_size=args.batch_size
+    )
 
 
 if __name__ == "__main__":

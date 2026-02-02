@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Video Chunking - RLM Explorer</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0f172a;
+            --card: #1e293b;
+            --accent: #38bdf8;
+            --text: #f8fafc;
+            --muted: #94a3b8;
+            --border: rgba(255, 255, 255, 0.1);
+        }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        .container {
+            width: 95%;
+            max-width: 1400px;
+            padding: 2rem;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        h1 {
+            font-weight: 600;
+            letter-spacing: -0.025em;
+            background: linear-gradient(to right, #38bdf8, #818cf8);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin: 0;
+        }
+
+        .upload-section {
+            background: var(--card);
+            padding: 1.5rem;
+            border-radius: 1rem;
+            border: 1px solid var(--border);
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        .btn {
+            background: var(--accent);
+            color: var(--bg);
+            padding: 0.6rem 1.5rem;
+            border-radius: 0.5rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: inline-block;
+        }
+
+        .btn:hover {
+            box-shadow: 0 0 15px rgba(56, 189, 248, 0.4);
+        }
+
+        .workspace {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 2rem;
+            display: none;
+        }
+
+        .main-col {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        video {
+            width: 100%;
+            border-radius: 1rem;
+            border: 1px solid var(--border);
+        }
+
+        .timeline {
+            background: var(--card);
+            padding: 1.5rem;
+            border-radius: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+        }
+
+        .level-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+        }
+
+        .level {
+            height: 34px;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 0.4rem;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .chunk {
+            height: 100%;
+            position: absolute;
+            cursor: pointer;
+            transition: all 0.2s;
+            border-left: 2px solid transparent;
+            box-sizing: border-box;
+        }
+
+        .chunk:hover {
+            background: rgba(255, 255, 255, 0.1) !important;
+            scale: 1.01;
+            z-index: 10;
+        }
+
+        .chunk.active {
+            background: rgba(56, 189, 248, 0.4) !important;
+            border-left-color: #fff !important;
+        }
+
+        .chunk.dimmed {
+            opacity: 0.3;
+        }
+
+        .level-label {
+            font-size: 0.7rem;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            font-weight: 600;
+        }
+
+        .details-panel {
+            background: var(--card);
+            padding: 1.5rem;
+            border-radius: 1rem;
+            border: 1px solid var(--border);
+            overflow-y: auto;
+            max-height: 80vh;
+        }
+
+        .detail-item {
+            margin-bottom: 1.5rem;
+        }
+
+        .detail-label {
+            font-size: 0.75rem;
+            color: var(--muted);
+            text-transform: uppercase;
+            margin-bottom: 0.5rem;
+        }
+
+        .detail-value {
+            font-size: 0.95rem;
+            line-height: 1.5;
+        }
+
+        .reason-box {
+            background: rgba(56, 189, 248, 0.1);
+            border-left: 3px solid var(--accent);
+            padding: 1rem;
+            border-radius: 0.5rem;
+            font-style: italic;
+            font-size: 0.9rem;
+        }
+
+        .loading {
+            display: none;
+            margin-top: 1rem;
+            color: var(--accent);
+            font-weight: 600;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <h1>RLM Video Explorer</h1>
+        </header>
+
+        <div class="upload-section">
+            <label for="video-input" class="btn">Choose Video</label>
+            <input type="file" id="video-input" accept="video/*">
+            <span id="file-name" style="margin: 0 1rem; color: var(--muted)"></span>
+            <div id="upload-btn" class="btn" style="display:none">Process & Analyze</div>
+            <div class="loading" id="loading">✨ AI is Analyzing Hierarchy...</div>
+        </div>
+
+        <div class="workspace" id="workspace">
+            <div class="main-col">
+                <video id="video-player" controls></video>
+                <div class="timeline">
+                    <div class="level-group">
+                        <div class="level-label">Coarse (High Level)</div>
+                        <div class="level" id="coarse-level"></div>
+                    </div>
+                    <div class="level-group">
+                        <div class="level-label">Medium (Structural)</div>
+                        <div class="level" id="medium-level"></div>
+                    </div>
+                    <div class="level-group">
+                        <div class="level-label">Fine (Detailed)</div>
+                        <div class="level" id="fine-level"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="details-panel" id="details">
+                <div id="no-selection" style="text-align: center; color: var(--muted); padding-top: 5rem;">
+                    Click a chunk to see details and reasoning
+                </div>
+                <div id="selection-content" style="display: none;">
+                    <div class="detail-item">
+                        <div class="detail-label">Text Label / Caption</div>
+                        <div id="det-label"
+                            style="font-size: 1.1rem; font-weight: 600; color: #fff; margin-bottom: 0.5rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">
+                        </div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Chunk ID & Level</div>
+                        <div class="detail-value" id="det-id" style="font-weight: 600; color: var(--accent);"></div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Time Range</div>
+                        <div class="detail-value" id="det-time"></div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Reasoning & logic</div>
+                        <div class="reason-box" id="det-reason"></div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Transcript Summary</div>
+                        <div class="detail-value" id="det-transcript" style="font-size: 0.85rem; color: var(--muted);">
+                        </div>
+                    </div>
+                    <div class="detail-item" id="parent-section" style="display:none;">
+                        <div class="detail-label">Parent Context (RLM)</div>
+                        <div class="detail-value" id="det-parent"
+                            style="cursor: pointer; color: var(--accent); text-decoration: underline;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const videoInput = document.getElementById('video-input');
+        const uploadBtn = document.getElementById('upload-btn');
+        const fileName = document.getElementById('file-name');
+        const loading = document.getElementById('loading');
+        const workspace = document.getElementById('workspace');
+        const player = document.getElementById('video-player');
+        let allData = null;
+
+        videoInput.onchange = () => {
+            if (videoInput.files.length > 0) {
+                fileName.textContent = videoInput.files[0].name;
+                uploadBtn.style.display = 'inline-block';
+            }
+        };
+
+        uploadBtn.onclick = async () => {
+            const formData = new FormData();
+            formData.append('video', videoInput.files[0]);
+            loading.style.display = 'block';
+            uploadBtn.style.display = 'none';
+
+            try {
+                const res = await fetch('/upload', { method: 'POST', body: formData });
+                const data = await res.json();
+                player.src = data.video_url;
+                const chunksRes = await fetch(data.chunks_url);
+                allData = await chunksRes.json();
+                renderTimeline();
+                workspace.style.display = 'grid';
+            } catch (err) { alert('Error processing video'); }
+            finally { loading.style.display = 'none'; }
+        };
+
+        function renderTimeline() {
+            const duration = allData.video_metadata.duration;
+            const levels = ['fine', 'medium', 'coarse'];
+            const colors = { fine: '#38bdf8', medium: '#818cf8', coarse: '#c084fc' };
+
+            levels.forEach(lvl => {
+                const container = document.getElementById(`${lvl}-level`);
+                container.innerHTML = '';
+                allData.chunks[lvl].forEach(chunk => {
+                    const el = document.createElement('div');
+                    el.className = 'chunk';
+                    el.id = `chunk-${chunk.chunk_id}`;
+                    el.style.left = `${(chunk.start_time / duration) * 100}%`;
+                    el.style.width = `${((chunk.end_time - chunk.start_time) / duration) * 100}%`;
+                    el.style.background = colors[lvl] + '22';
+                    el.style.borderLeftColor = colors[lvl];
+
+                    el.onclick = (e) => {
+                        e.stopPropagation();
+                        selectChunk(chunk);
+                    };
+                    container.appendChild(el);
+                });
+            });
+        }
+
+        function selectChunk(chunk) {
+            document.querySelectorAll('.chunk').forEach(c => {
+                c.classList.remove('active', 'dimmed');
+            });
+
+            const el = document.getElementById(`chunk-${chunk.chunk_id}`);
+            el.classList.add('active');
+
+            // Highlight hierarchy
+            highlightHierarchy(chunk);
+
+            player.currentTime = chunk.start_time;
+
+            document.getElementById('no-selection').style.display = 'none';
+            document.getElementById('selection-content').style.display = 'block';
+            document.getElementById('det-id').textContent = `${chunk.level.toUpperCase()} | ${chunk.chunk_id}`;
+            document.getElementById('det-label').textContent = chunk.caption || (chunk.transcript ? chunk.transcript.substring(0, 100) + '...' : 'No label generated');
+            document.getElementById('det-time').textContent = `${chunk.start_time.toFixed(2)}s - ${chunk.end_time.toFixed(2)}s (${chunk.duration.toFixed(1)}s)`;
+            document.getElementById('det-reason').textContent = chunk.reasoning || "Standard hierarchical grouping based on semantic and temporal distance.";
+            document.getElementById('det-transcript').textContent = chunk.transcript || "No transcript available for this segment.";
+
+            const parentSection = document.getElementById('parent-section');
+            if (chunk.parent_chunk_id) {
+                parentSection.style.display = 'block';
+                document.getElementById('det-parent').textContent = `Go to Parent: ${chunk.parent_chunk_id}`;
+                document.getElementById('det-parent').onclick = () => {
+                    const pLevel = chunk.level === 'fine' ? 'medium' : 'coarse';
+                    const parentData = allData.chunks[pLevel].find(c => c.chunk_id === chunk.parent_chunk_id);
+                    if (parentData) selectChunk(parentData);
+                };
+            } else {
+                parentSection.style.display = 'none';
+            }
+        }
+
+        function highlightHierarchy(chunk) {
+            let relatedIds = [chunk.chunk_id];
+
+            // Find children if this is a parent
+            if (chunk.level === 'coarse') {
+                const mediums = allData.chunks.medium.filter(m => m.parent_chunk_id === chunk.chunk_id);
+                mediums.forEach(m => {
+                    relatedIds.push(m.chunk_id);
+                    const fines = allData.chunks.fine.filter(f => f.parent_chunk_id === m.chunk_id);
+                    fines.forEach(f => relatedIds.push(f.chunk_id));
+                });
+            } else if (chunk.level === 'medium') {
+                if (chunk.parent_chunk_id) relatedIds.push(chunk.parent_chunk_id);
+                const fines = allData.chunks.fine.filter(f => f.parent_chunk_id === chunk.chunk_id);
+                fines.forEach(f => relatedIds.push(f.chunk_id));
+            } else if (chunk.level === 'fine') {
+                if (chunk.parent_chunk_id) {
+                    relatedIds.push(chunk.parent_chunk_id);
+                    const parent = allData.chunks.medium.find(m => m.chunk_id === chunk.parent_chunk_id);
+                    if (parent && parent.parent_chunk_id) relatedIds.push(parent.parent_chunk_id);
+                }
+            }
+
+            document.querySelectorAll('.chunk').forEach(c => {
+                const id = c.id.replace('chunk-', '');
+                if (relatedIds.includes(id)) {
+                    c.classList.remove('dimmed');
+                } else {
+                    c.classList.add('dimmed');
+                }
+            });
+        }
+    </script>
+</body>
+
+</html>

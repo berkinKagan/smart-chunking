@@ -168,7 +168,8 @@ Summary:"""
         prompt: str
     ) -> str:
         images = []
-        for frame in frames[:10]:
+        if frames:
+            frame = frames[len(frames) // 2]
             if not isinstance(frame, Image.Image):
                 frame = Image.fromarray(frame)
             
@@ -365,7 +366,8 @@ Score:"""
                 start_time=chunk1.start_time,
                 end_time=chunk2.end_time,
                 shot_ids=chunk1.shot_ids + chunk2.shot_ids,
-                transcript=f"{chunk1.transcript} {chunk2.transcript}".strip()
+                transcript=f"{chunk1.transcript} {chunk2.transcript}".strip(),
+                reasoning=f"Merged {chunk1.chunk_id} and {chunk2.chunk_id} (Continuity Score: {score:.2f}) based on LLM boundary refinement."
             )
             
             refined_chunks[idx] = merged
