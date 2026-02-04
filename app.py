@@ -3,8 +3,10 @@ import json
 from flask import Flask, request, render_template, send_from_directory, jsonify
 from pathlib import Path
 from main_pipeline import hybrid_hierarchical_chunking
+from dotenv import load_dotenv
 
-os.environ['GOOGLE_API_KEY'] = 'AIzaSyAlQvAVQ90nji-Y0yh0nwAYWI0unxxKdGY'
+# Load environment variables from .env file
+load_dotenv()
 
 app = Flask(__name__)
 UPLOAD_FOLDER = 'static/uploads'

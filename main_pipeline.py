@@ -31,8 +31,9 @@ def hybrid_hierarchical_chunking(video_path: str, output_path: str, device: str 
     samples = extractor.extract_features(video_path, sampling_plan, codec_data)
     
     # Stage 4: Hybrid Clustering (~1 min)
+    # Only generate coarse chunks to save CPU
     clusterer = HybridClustering()
-    chunks_dict = clusterer.cluster(samples, codec_data, DEFAULT_LEVELS)
+    chunks_dict = clusterer.cluster(samples, codec_data, ["coarse"])
     
     # Stage 5: Refinement & Captioning (~30s)
     refiner = BoundaryRefiner()
@@ -41,16 +42,17 @@ def hybrid_hierarchical_chunking(video_path: str, output_path: str, device: str 
     # Format to Action100M-style output
     execution_time = time.time() - start_time
     
-    # Build hierarchy links
-    for level in ["fine", "medium"]:
-        parent_level = "medium" if level == "fine" else "coarse"
-        for chunk in final_chunks.get(level, []):
-            mid_time = (chunk.start_time + chunk.end_time) / 2
-            # Find parent that contains this midpoint
-            for parent in final_chunks.get(parent_level, []):
-                if parent.start_time <= mid_time <= parent.end_time:
-                    chunk.parent_chunk_id = parent.chunk_id
-                    break
+    # Build hierarchy links (skipped when only generating coarse chunks)
+    # Uncomment when generating multiple levels
+    # for level in ["fine", "medium"]:
+    #     parent_level = "medium" if level == "fine" else "coarse"
+    #     for chunk in final_chunks.get(level, []):
+    #         mid_time = (chunk.start_time + chunk.end_time) / 2
+    #         # Find parent that contains this midpoint
+    #         for parent in final_chunks.get(parent_level, []):
+    #             if parent.start_time <= mid_time <= parent.end_time:
+    #                 chunk.parent_chunk_id = parent.chunk_id
+    #                 break
 
     output = {
         "video_path": video_path,

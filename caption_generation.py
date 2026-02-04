@@ -31,7 +31,10 @@ class CaptionGenerator:
             )
         elif provider == "ollama":
             import ollama
-            self.client = ollama.Client(host=os.environ.get("OLLAMA_HOST", "http://localhost:11434"))
+            self.client = ollama.Client(
+                host=os.environ.get("OLLAMA_HOST", "http://localhost:11434"),
+                timeout=300.0  # 5 minute timeout to prevent hanging
+            )
         elif provider == "gemini":
             from google import genai
             self.client = genai.Client(api_key=api_key or os.environ.get("GOOGLE_API_KEY"))
@@ -335,7 +338,10 @@ class BoundaryRefiner:
             )
         elif provider == "ollama":
             import ollama
-            self.client = ollama.Client(host=os.environ.get("OLLAMA_HOST", "http://localhost:11434"))
+            self.client = ollama.Client(
+                host=os.environ.get("OLLAMA_HOST", "http://localhost:11434"),
+                timeout=300.0  # 5 minute timeout to prevent hanging
+            )
     
     def compute_continuity_score(
         self,
