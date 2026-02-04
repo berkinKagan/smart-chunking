@@ -299,7 +299,7 @@
         };
 
         function renderTimeline() {
-            const duration = allData.video_metadata.duration;
+            const duration = allData.duration;
             const levels = ['fine', 'medium', 'coarse'];
             const colors = { fine: '#38bdf8', medium: '#818cf8', coarse: '#c084fc' };
 
@@ -310,8 +310,8 @@
                     const el = document.createElement('div');
                     el.className = 'chunk';
                     el.id = `chunk-${chunk.chunk_id}`;
-                    el.style.left = `${(chunk.start_time / duration) * 100}%`;
-                    el.style.width = `${((chunk.end_time - chunk.start_time) / duration) * 100}%`;
+                    el.style.left = `${(chunk.start / duration) * 100}%`;
+                    el.style.width = `${((chunk.end - chunk.start) / duration) * 100}%`;
                     el.style.background = colors[lvl] + '22';
                     el.style.borderLeftColor = colors[lvl];
 
@@ -335,23 +335,23 @@
             // Highlight hierarchy
             highlightHierarchy(chunk);
 
-            player.currentTime = chunk.start_time;
+            player.currentTime = chunk.start;
 
             document.getElementById('no-selection').style.display = 'none';
             document.getElementById('selection-content').style.display = 'block';
             document.getElementById('det-id').textContent = `${chunk.level.toUpperCase()} | ${chunk.chunk_id}`;
             document.getElementById('det-label').textContent = chunk.caption || (chunk.transcript ? chunk.transcript.substring(0, 100) + '...' : 'No label generated');
-            document.getElementById('det-time').textContent = `${chunk.start_time.toFixed(2)}s - ${chunk.end_time.toFixed(2)}s (${chunk.duration.toFixed(1)}s)`;
+            document.getElementById('det-time').textContent = `${chunk.start.toFixed(2)}s - ${chunk.end.toFixed(2)}s (${(chunk.end - chunk.start).toFixed(1)}s)`;
             document.getElementById('det-reason').textContent = chunk.reasoning || "Standard hierarchical grouping based on semantic and temporal distance.";
             document.getElementById('det-transcript').textContent = chunk.transcript || "No transcript available for this segment.";
 
             const parentSection = document.getElementById('parent-section');
-            if (chunk.parent_chunk_id) {
+            if (chunk.parent_id) {
                 parentSection.style.display = 'block';
-                document.getElementById('det-parent').textContent = `Go to Parent: ${chunk.parent_chunk_id}`;
+                document.getElementById('det-parent').textContent = `Go to Parent: ${chunk.parent_id}`;
                 document.getElementById('det-parent').onclick = () => {
                     const pLevel = chunk.level === 'fine' ? 'medium' : 'coarse';
-                    const parentData = allData.chunks[pLevel].find(c => c.chunk_id === chunk.parent_chunk_id);
+                    const parentData = allData.chunks[pLevel].find(c => c.chunk_id === chunk.parent_id);
                     if (parentData) selectChunk(parentData);
                 };
             } else {
@@ -364,21 +364,21 @@
 
             // Find children if this is a parent
             if (chunk.level === 'coarse') {
-                const mediums = allData.chunks.medium.filter(m => m.parent_chunk_id === chunk.chunk_id);
+                const mediums = allData.chunks.medium.filter(m => m.parent_id === chunk.chunk_id);
                 mediums.forEach(m => {
                     relatedIds.push(m.chunk_id);
-                    const fines = allData.chunks.fine.filter(f => f.parent_chunk_id === m.chunk_id);
+                    const fines = allData.chunks.fine.filter(f => f.parent_id === m.chunk_id);
                     fines.forEach(f => relatedIds.push(f.chunk_id));
                 });
             } else if (chunk.level === 'medium') {
-                if (chunk.parent_chunk_id) relatedIds.push(chunk.parent_chunk_id);
-                const fines = allData.chunks.fine.filter(f => f.parent_chunk_id === chunk.chunk_id);
+                if (chunk.parent_id) relatedIds.push(chunk.parent_id);
+                const fines = allData.chunks.fine.filter(f => f.parent_id === chunk.chunk_id);
                 fines.forEach(f => relatedIds.push(f.chunk_id));
             } else if (chunk.level === 'fine') {
-                if (chunk.parent_chunk_id) {
-                    relatedIds.push(chunk.parent_chunk_id);
-                    const parent = allData.chunks.medium.find(m => m.chunk_id === chunk.parent_chunk_id);
-                    if (parent && parent.parent_chunk_id) relatedIds.push(parent.parent_chunk_id);
+                if (chunk.parent_id) {
+                    relatedIds.push(chunk.parent_id);
+                    const parent = allData.chunks.medium.find(m => m.chunk_id === chunk.parent_id);
+                    if (parent && parent.parent_id) relatedIds.push(parent.parent_id);
                 }
             }
 

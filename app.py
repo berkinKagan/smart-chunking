@@ -2,7 +2,9 @@ import os
 import json
 from flask import Flask, request, render_template, send_from_directory, jsonify
 from pathlib import Path
-from chunk_video import run_pipeline
+from main_pipeline import hybrid_hierarchical_chunking
+
+os.environ['GOOGLE_API_KEY'] = 'AIzaSyAlQvAVQ90nji-Y0yh0nwAYWI0unxxKdGY'
 
 app = Flask(__name__)
 UPLOAD_FOLDER = 'static/uploads'
@@ -28,18 +30,13 @@ def upload_file():
     filepath = os.path.join(app.config['UPLOAD_FOLDER'], file.filename)
     file.save(filepath)
     
-    output_dir = os.path.join(OUTPUT_FOLDER, Path(file.filename).stem)
+    output_path = os.path.join(OUTPUT_FOLDER, Path(file.filename).stem, "chunks.json")
     
-    result = run_pipeline(
+    # Run the new hybrid pipeline
+    hybrid_hierarchical_chunking(
         video_path=filepath,
-        output_dir=output_dir,
-        device="cpu",
-        generate_captions=True,
-        use_boundary_refinement=True,
-        caption_provider="ollama",
-        caption_model="llama3.2-vision:11b",
-        reasoning_model="llama3.1:8b",
-        ignore_checkpoint=True
+        output_path=output_path,
+        device="cpu"
     )
     
     return jsonify({

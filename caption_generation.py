@@ -32,6 +32,9 @@ class CaptionGenerator:
         elif provider == "ollama":
             import ollama
             self.client = ollama.Client(host=os.environ.get("OLLAMA_HOST", "http://localhost:11434"))
+        elif provider == "gemini":
+            from google import genai
+            self.client = genai.Client(api_key=api_key or os.environ.get("GOOGLE_API_KEY"))
         else:
             raise ValueError(f"Unsupported provider: {provider}")
     
@@ -93,10 +96,14 @@ Summary:"""
     
     def _get_num_frames_for_level(self, level: str) -> int:
         frame_counts = {
-            "fine": 5,
-            "medium": 10,
-            "coarse": 20
+            "fine": 3,
+            "medium": 5,
+            "coarse": 8
         }
+        # Further reduce for Ollama to save CPU
+        if self.provider == "ollama":
+            from config import OLLAMA_MAX_FRAMES
+            return min(frame_counts.get(level, 3), OLLAMA_MAX_FRAMES)
         return frame_counts.get(level, 5)
     
     def generate_caption_openai(
@@ -184,6 +191,39 @@ Summary:"""
         )
         
         return response.get('response', '').strip()
+    
+    def generate_caption_gemini(
+        self,
+        frames: List,
+        prompt: str
+    ) -> str:
+        from google.genai import types
+        
+        contents = []
+        
+        for frame in frames[:10]:
+            if isinstance(frame, Image.Image):
+                pil_image = frame
+            else:
+                pil_image = Image.fromarray(frame)
+            
+            buffer = io.BytesIO()
+            pil_image.save(buffer, format="JPEG", quality=85)
+            image_bytes = buffer.getvalue()
+            
+            contents.append(types.Part.from_bytes(
+                data=image_bytes,
+                mime_type='image/jpeg'
+            ))
+        
+        contents.append(prompt)
+        
+        response = self.client.models.generate_content(
+            model=self.model,
+            contents=contents
+        )
+        
+        return response.text.strip()
 
     def generate_caption(
         self,
@@ -192,16 +232,33 @@ Summary:"""
     ) -> str:
         num_frames = self._get_num_frames_for_level(chunk.level)
         
+        # Try I-frame extraction first (much faster)
         try:
+            from utils import extract_iframes_for_segment
+            frames = extract_iframes_for_segment(
+                video_path,
+                chunk.start_time,
+                chunk.end_time,
+                max_frames=num_frames
+            )
+            if frames:
+                logger.info(f"Using {len(frames)} I-frames for chunk {chunk.chunk_id}")
+            else:
+                # Fallback to standard keyframe extraction if no I-frames found
+                frames = extract_keyframes(
+                    video_path,
+                    chunk.start_time,
+                    chunk.end_time,
+                    num_frames
+                )
+        except Exception as e:
+            logger.warning(f"I-frame extraction failed, falling back: {e}")
             frames = extract_keyframes(
                 video_path,
                 chunk.start_time,
                 chunk.end_time,
                 num_frames
             )
-        except Exception as e:
-            logger.warning(f"Failed to extract keyframes for {chunk.chunk_id}: {e}")
-            frames = []
         
         prompt = self._get_prompt_for_level(
             chunk.level,
@@ -223,6 +280,8 @@ Description:"""
                 caption = self.generate_caption_anthropic(frames, prompt)
             elif self.provider == "ollama":
                 caption = self.generate_caption_ollama(frames, prompt)
+            elif self.provider == "gemini":
+                caption = self.generate_caption_gemini(frames, prompt)
         except Exception as e:
             logger.error(f"Caption generation failed for {chunk.chunk_id}: {e}")
             caption = f"[Caption generation failed: {str(e)}]"
