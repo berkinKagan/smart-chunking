@@ -306,7 +306,7 @@
             levels.forEach(lvl => {
                 const container = document.getElementById(`${lvl}-level`);
                 container.innerHTML = '';
-                allData.chunks[lvl].forEach(chunk => {
+                (allData.chunks[lvl] || []).forEach(chunk => {
                     const el = document.createElement('div');
                     el.className = 'chunk';
                     el.id = `chunk-${chunk.chunk_id}`;

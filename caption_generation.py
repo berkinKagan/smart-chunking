@@ -38,6 +38,12 @@ class CaptionGenerator:
         elif provider == "gemini":
             from google import genai
             self.client = genai.Client(api_key=api_key or os.environ.get("GOOGLE_API_KEY"))
+        elif provider == "openrouter":
+            from openai import OpenAI
+            self.client = OpenAI(
+                base_url="https://openrouter.ai/api/v1",
+                api_key=api_key or os.environ.get("OPENROUTER_API_KEY")
+            )
         else:
             raise ValueError(f"Unsupported provider: {provider}")
     
@@ -228,6 +234,36 @@ Summary:"""
         
         return response.text.strip()
 
+    def generate_caption_openrouter(
+        self,
+        frames: List,
+        prompt: str
+    ) -> str:
+        content = [{"type": "text", "text": prompt}]
+
+        for frame in frames[:10]:
+            base64_image = self._encode_image(frame)
+            content.append({
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:image/jpeg;base64,{base64_image}",
+                    "detail": "low"
+                }
+            })
+
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {
+                    "role": "user",
+                    "content": content
+                }
+            ],
+            max_tokens=500
+        )
+
+        return response.choices[0].message.content.strip()
+
     def generate_caption(
         self,
         video_path: str,
@@ -285,6 +321,8 @@ Description:"""
                 caption = self.generate_caption_ollama(frames, prompt)
             elif self.provider == "gemini":
                 caption = self.generate_caption_gemini(frames, prompt)
+            elif self.provider == "openrouter":
+                caption = self.generate_caption_openrouter(frames, prompt)
         except Exception as e:
             logger.error(f"Caption generation failed for {chunk.chunk_id}: {e}")
             caption = f"[Caption generation failed: {str(e)}]"
